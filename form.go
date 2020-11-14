@@ -206,7 +206,7 @@ func (f *File) Validate() error {
 		if err == io.EOF {
 			errs.Put(f.field, ErrFieldRequired(f.field))
 		}
-		return err
+		return errs
 	}
 
 	if _, err := f.Seek(0, io.SeekStart); err != nil {

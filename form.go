@@ -126,10 +126,12 @@ func UnmarshalAndValidate(f Form, r *http.Request) error {
 	}
 
 	if err := f.Validate(); err != nil {
-		if v, ok := err.(*Errors); ok {
-			errs.Merge(v)
+		v, ok := err.(*Errors)
+
+		if !ok {
+			return err
 		}
-		return err
+		errs.Merge(v)
 	}
 	return errs.Err()
 }

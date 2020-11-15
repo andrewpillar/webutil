@@ -196,8 +196,14 @@ func (f *File) Validate() error {
 	errs := NewErrors()
 
 	if err := f.resolveFile(); err != nil {
-		if strings.Contains(err.Error(), "request body too large") {
+		msg := err.Error()
+
+		if strings.Contains(msg, "request body too large") {
 			errs.Put(f.field, fmt.Errorf("%s cannot be bigger than %s", f.field, humanSize(f.size)))
+		}
+
+		if strings.Contains(msg, "no such file") {
+			errs.Put(f.field, ErrFieldRequired(f.field))
 		}
 		return errs.Err()
 	}

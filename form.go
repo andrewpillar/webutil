@@ -40,8 +40,8 @@ type File struct {
 	mimes []string // mimes to allow/disallow during upload
 	allow bool     // whether or not we should allow/disallow the mimes
 
-	// Type is the MIME of the file being uploaded.
-	Type string
+	Header *multipart.FileHeader // Header describes a file part of a multi part request.
+	Type   string                // Type is the MIME of the file being uploaded.
 
 	// Request is the current HTTP request through which the file is being
 	// uploaded.
@@ -146,13 +146,14 @@ func (f *File) resolveFile() error {
 			return err
 		}
 
-		file, _, err := f.Request.FormFile(f.field)
+		file, header, err := f.Request.FormFile(f.field)
 
 		if err != nil {
 			return err
 		}
 
 		f.File = file
+		f.Header = header
 		return nil
 	}
 

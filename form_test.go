@@ -21,7 +21,7 @@ type Post struct {
 
 var _ Form = (*Post)(nil)
 
-func spoofFile(t *testing.T) (*http.Request, http.ResponseWriter) {
+func spoofFile(t *testing.T) *http.Request {
 	pr, pw := io.Pipe()
 
 	mpw := multipart.NewWriter(pw)
@@ -47,13 +47,13 @@ func spoofFile(t *testing.T) (*http.Request, http.ResponseWriter) {
 	r := httptest.NewRequest("POST", "/upload", pr)
 	r.Header.Add("Content-Type", mpw.FormDataContentType())
 
-	return r, httptest.NewRecorder()
+	return r
 }
 
 func Test_FileAllow(t *testing.T) {
-	r, w := spoofFile(t)
+	r := spoofFile(t)
 
-	f := NewFile("avatar", 0, w, r)
+	f := NewFile("avatar", 0, r)
 	f.Allow("image/jpeg")
 
 	if err := UnmarshalAndValidate(f, r); err != nil {
@@ -63,9 +63,9 @@ func Test_FileAllow(t *testing.T) {
 }
 
 func Test_FileDisallow(t *testing.T) {
-	r, w := spoofFile(t)
+	r := spoofFile(t)
 
-	f := NewFile("avatar", 0, w, r)
+	f := NewFile("avatar", 0, r)
 	f.Disallow("image/jpeg")
 
 	if err := UnmarshalAndValidate(f, r); err == nil {
@@ -74,12 +74,26 @@ func Test_FileDisallow(t *testing.T) {
 }
 
 func Test_FileLimit(t *testing.T) {
-	r, w := spoofFile(t)
+	r := spoofFile(t)
 
-	f := NewFile("avatar", 1, w, r)
+	f := NewFile("avatar", 1, r)
 
-	if err := UnmarshalAndValidate(f, r); err == nil {
+	err := UnmarshalAndValidate(f, r)
+
+	if err == nil {
 		t.Fatalf("expected UnmarshalAndValidate to error\n")
+	}
+
+	ferrs, ok := err.(*Errors)
+
+	if !ok {
+		t.Fatalf("unexpected error type, expected=%T, got=%T", NewErrors(), ferrs)
+	}
+
+	expected := "avatar cannot be bigger than 1 B"
+
+	if msg := ferrs.First("avatar"); msg != expected {
+		t.Fatalf("unexpected error, expected=%q, got=%q\n", expected, msg)
 	}
 }
 

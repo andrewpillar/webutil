@@ -3,6 +3,7 @@ package webutil
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -51,6 +52,8 @@ type File struct {
 var (
 	_ multipart.File = (*sectionReadCloser)(nil)
 	_ Form           = (*File)(nil)
+
+	ErrFileTooLarge = errors.New("file is too large")
 )
 
 func humanSize(n int64) string {
@@ -66,11 +69,7 @@ func humanSize(n int64) string {
 // NewFile returns a new File for the given form field with the given maximum
 // file size. If size is 0 then no limit is set on the size of a file that can
 // be uploaded.
-func NewFile(field string, size int64, w http.ResponseWriter, r *http.Request) *File {
-	if size > 0 {
-		r.Body = http.MaxBytesReader(w, r.Body, size)
-	}
-
+func NewFile(field string, size int64, r *http.Request) *File {
 	return &File{
 		field:   field,
 		size:    size,
@@ -137,19 +136,22 @@ func UnmarshalAndValidate(f Form, r *http.Request) error {
 }
 
 // resolveFile will parse the request body and attempt to extract a file that
-// was uploaded to it. If the Content-Type of the request is of
-// "multipart/form-data" then ParseMultipartForm will be called on the request.
-// Otherwise the entire request body is treated as the file being uploaded.
+// was sent in it. If the Content-Type of the request is of multipart/form-data
+// then FormFile will be called on the request, otherwise the entire request
+// body is treated as the file being uploaded. If the file found in the request
+// exceeds the configured size then ErrFileTooLarge is returned.
 func (f *File) resolveFile() error {
 	if strings.HasPrefix(f.Request.Header.Get("Content-Type"), "multipart/form-data") {
-		if err := f.Request.ParseMultipartForm(f.size); err != nil {
-			return err
-		}
-
 		file, header, err := f.Request.FormFile(f.field)
 
 		if err != nil {
 			return err
+		}
+
+		if f.size > 0 {
+			if header.Size > f.size {
+				return ErrFileTooLarge
+			}
 		}
 
 		f.File = file
@@ -161,6 +163,12 @@ func (f *File) resolveFile() error {
 
 	if _, err := io.Copy(&buf, f.Request.Body); err != nil {
 		return err
+	}
+
+	if f.size > 0 {
+		if int64(buf.Len()) > f.size {
+			return ErrFileTooLarge
+		}
 	}
 
 	b := buf.Bytes()
@@ -197,13 +205,11 @@ func (f *File) Validate() error {
 	errs := NewErrors()
 
 	if err := f.resolveFile(); err != nil {
-		msg := err.Error()
-
-		if strings.Contains(msg, "request body too large") {
+		if err == ErrFileTooLarge {
 			errs.Put(f.field, fmt.Errorf("%s cannot be bigger than %s", f.field, humanSize(f.size)))
 		}
 
-		if strings.Contains(msg, "no such file") {
+		if strings.Contains(err.Error(), "no such file") {
 			errs.Put(f.field, ErrFieldRequired(f.field))
 		}
 		return errs.Err()

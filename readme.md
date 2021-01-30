@@ -63,7 +63,7 @@ brevity,
     func Upload(w http.ResponseWriter, r *http.Request) {
        sess, _ := store.Get(r, "session")
 
-        f := webutil.NewFile("avatar", 5 * (1 << 20), w, r)
+        f := webutil.NewFile("avatar", 5 * (1 << 20), r)
         f.Allow("image/png", "image/jpeg")
 
         if err := webutil.UnmarshalAndValidate(f, r); err != nil {

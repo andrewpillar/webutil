@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gorilla/schema"
@@ -195,6 +196,14 @@ func (f *File) Disallow(mimes ...string) {
 
 // Fields will always return nil.
 func (*File) Fields() map[string]string { return nil }
+
+// Remove the file if it exists on disk. If the underlying multipart.File is
+// not of *os.File, then this does nothing.
+func (f *File) Remove() {
+	if v, ok := f.File.(*os.File); ok {
+		os.RemoveAll(v.Name())
+	}
+}
 
 // Validate will check the size of the file being uploaded, and set the Type
 // of the file. If any mimes have been set then these will be checked to

@@ -199,10 +199,11 @@ func (*File) Fields() map[string]string { return nil }
 
 // Remove the file if it exists on disk. If the underlying multipart.File is
 // not of *os.File, then this does nothing.
-func (f *File) Remove() {
+func (f *File) Remove() error {
 	if v, ok := f.File.(*os.File); ok {
-		os.RemoveAll(v.Name())
+		return os.RemoveAll(v.Name())
 	}
+	return nil
 }
 
 // Validate will check the size of the file being uploaded, and set the Type

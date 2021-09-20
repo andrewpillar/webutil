@@ -118,6 +118,10 @@ func UnmarshalAndValidate(f Form, r *http.Request) error {
 			for k, err := range v {
 				errs.Put(k, err)
 			}
+		case *json.UnmarshalFieldError:
+			errs.Put(string(v.Field.Tag), err)
+		case *json.UnmarshalTypeError:
+			errs.Put(v.Field, err)
 		case UnmarshalError:
 			errs.Put(v.Field, v.Err)
 		default:

@@ -102,6 +102,7 @@ func Test_Form(t *testing.T) {
 		form        Post
 		request     *http.Request
 		shouldError bool
+		errors      []string
 	}{
 		{
 			Post{},
@@ -112,6 +113,7 @@ func Test_Form(t *testing.T) {
 				},
 			},
 			false,
+			[]string{},
 		},
 		{
 			Post{},
@@ -122,11 +124,24 @@ func Test_Form(t *testing.T) {
 				Body: ioutil.NopCloser(bytes.NewBufferString(`{"title": "my post", "body": "body"}`)),
 			},
 			false,
+			[]string{},
 		},
 		{
 			Post{},
 			&http.Request{},
 			true,
+			[]string{"title", "body"},
+		},
+		{
+			Post{},
+			&http.Request{
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body: ioutil.NopCloser(bytes.NewBufferString(`{"title": -1, "body": [1, 2, 3]}`)),
+			},
+			true,
+			[]string{"title", "body"},
 		},
 	}
 
@@ -134,6 +149,18 @@ func Test_Form(t *testing.T) {
 		if err := UnmarshalAndValidate(&test.form, test.request); err != nil {
 			if !test.shouldError {
 				t.Fatalf("tests[%d] - unexpected UnmarshalAndValidate error: %s\n", i, err)
+			}
+
+			errs, ok := err.(*Errors)
+
+			if !ok {
+				t.Fatalf("tests[%d] - unexpected error type, expected=%T, got=%T\n", i, &Errors{}, err)
+			}
+
+			for _, field := range test.errors {
+				if _, ok := (*errs)[field]; !ok {
+					t.Fatalf("tests[%d] - expected field %q in errors\n", i, field)
+				}
 			}
 		}
 	}

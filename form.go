@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/gorilla/schema"
@@ -121,6 +122,19 @@ func UnmarshalAndValidate(f Form, r *http.Request) error {
 		case *json.UnmarshalFieldError:
 			errs.Put(string(v.Field.Tag), err)
 		case *json.UnmarshalTypeError:
+			val := reflect.ValueOf(f)
+
+			// See if the field exists within a struct, if so rewrite the field
+			// name to be the JSON tag that was used for unmarshalling.
+			if el := val.Elem(); el.Kind() == reflect.Struct {
+				t := el.Type()
+
+				if field, ok := t.FieldByName(v.Field); ok {
+					if tag, ok := field.Tag.Lookup("json"); ok {
+						v.Field = tag
+					}
+				}
+			}
 			errs.Put(v.Field, errors.New("cannot unmarshal " + v.Value + " to " + v.Type.String()))
 		case UnmarshalError:
 			errs.Put(v.Field, v.Err)

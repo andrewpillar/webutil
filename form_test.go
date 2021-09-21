@@ -15,8 +15,8 @@ import (
 )
 
 type Post struct {
-	Title  string `schema:"title"`
-	Body   string `schema:"body"`
+	Title  string `schema:"title" json:"title"`
+	Body   string `schema:"body"  json:"body"`
 }
 
 var _ Form = (*Post)(nil)
@@ -155,6 +155,10 @@ func Test_Form(t *testing.T) {
 
 			if !ok {
 				t.Fatalf("tests[%d] - unexpected error type, expected=%T, got=%T\n", i, &Errors{}, err)
+			}
+
+			if len(test.errors) != len(*errs) {
+				t.Fatalf("tests[%d] - unexpected error count, expected=%d, got=%d\n", i, len(test.errors), len(*errs))
 			}
 
 			for _, field := range test.errors {

@@ -212,6 +212,8 @@ func UnmarshalForm(f Form, r *http.Request) error {
 				}
 			}
 			verrs.Add(v.Field, errors.New("cannot unmarshal "+v.Value+" to "+v.Type.String()))
+		case UnmarshalError:
+			verrs.Add(v.Field, v.Err)
 		default:
 			return err
 		}
@@ -394,6 +396,15 @@ func (v *FileValidator) Validate(errs ValidationErrors) {
 			errs.Add(v.Field, err)
 		}
 	}
+}
+
+type UnmarshalError struct {
+	Field string
+	Err   error
+}
+
+func (e UnmarshalError) Error() string {
+	return "failed to unmarshal " + e.Field + ": " + e.Err.Error()
 }
 
 // ValidationErrors records any validation errors that may have occurred. Each

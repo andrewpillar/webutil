@@ -2,9 +2,7 @@
 
 webutil is a collection of utility functions to aid in the development of web
 applications in Go. this builds on top of some packages provided by the
-[Gorilla web toolkit](https://www.gorillatoolkit.org/) such as
-[gorilla/schema](https://github.com/gorilla/schema) and
-[gorilla/sessions](https://github.com/gorilla/sessions).
+[Gorilla web toolkit][0] such as [gorilla/schema][1] and [gorilla/sessions][2].
 
 This package provides the ability to easily handle form validation, file
 uploads, serving different content types, and flashing of form data between
@@ -14,87 +12,108 @@ requests.
 
 **Form Validation**
 
-Form validation is achieved via the `webutil.Form` method that wraps the
-`Fields`, and `Validate` methods. The `Validate` method is what is called
-to actually perform the form validation, and the `Fields` method is what's
-called when form data is flashed to the session. Below is an example of a
-form implementation,
+Form validations is achieved via the `webutil.Form` and `webutil.Validator`
+interfaces. The `webutil.Form` interface wraps the `Fields` method that returns
+a map of the underlying fields in the form. The `webutil.Validator` interface
+wraps the `Validate` method for validating data. Below is an example of these
+interfaces being implemented for form validation,
 
-    type Login struct {
-        Email    string `schema:"email"`
-        Password string `schema:"password"`
+    type LoginForm struct {
+        Email    string
+        Password string
     }
 
-    func (f Login) Fields() map[string]string {
+    func (f LoginForm) Fields() map[string]string {
         return map[string]string{
             "email": f.Email,
         }
     }
 
-    func (f Login) Validate() error {
-        errs := webutil.NewErrors()
-
-        if f.Email == "" {
-            errs.Put("email", webutil.ErrFieldRequired("email"))
-        }
-
-        if f.Password == "" {
-            errs.Put("password", webutil.ErrFieldRequired("password"))
-        }
-        return errs.Err()
+    type LoginValidator struct {
+        Form Login
     }
 
-the [gorilla/schema](https://github.com/gorilla/schema) package is used to
-handle the unmarshalling of request data into a form.
+    func (v LoginValidator) Validate(errs webutil.ValidationErrors) error {
+        if f.Email == "" {
+            errs.Add("email", webutil.ErrFieldRequired("email"))
+        }
+        if f.Password == "" {
+            errs.Add("password", webutil.ErrFieldRequired("password"))
+        }
+    }
 
-Each implementation of the `webutil.Form` interface should return the
-`*webutil.Errors` type containg any validation errors that occur. If any
-other errors occur during the invocation of `Validate`, (such as a database
-connection error), then it is fine to return these directly.
+with the above implementation we can then use `webutil.UnmarshalForm` and
+`webutil.Validate` to unmarshal and validate the form data,
+
+    func Login(w http.ResponseWriter, r *http.Request) {
+        var f LoginForm
+
+        if err := webutil.UnmarshalForm(&f, r); err != nil {
+            io.WriteString(w, err.Error())
+            return
+        }
+
+        v := LoginValidator{
+            Form: f,
+        }
+
+        if err := webutil.Validate(v); err != nil {
+            io.WriteString(w, err.Error())
+            return
+        }
+    }
+
+`webutil.Validate` will always return the `webutil.ValidationErrors` error
+type. Under the hood the [gorilla/schema][3] package is used to handle the
+unmarshalling of request data into a form.
 
 **File Uploads**
 
-File uploads can be handled via the `webutil.File` type that can be created
-via `webutil.NewFile`. Below is an example of handling file uploads, elided for
-brevity,
+File uploads can be handled via the `webutil.File` type. This can be used along
+the `webutil.FileValidator` to handle the uploading and validating of files,
 
-    var store = sessions.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
+    type UploadForm struct {
+        File *webutil.File
+        Name string
+    }
 
     func Upload(w http.ResponseWriter, r *http.Request) {
-       sess, _ := store.Get(r, "session")
+        f := UploadForm{
+            File: &webutil.File{
+                Field: "avatar",
+            },
+        }
 
-        f := webutil.NewFile("avatar", 5 * (1 << 20), r)
-        f.Allow("image/png", "image/jpeg")
+        if err := webutil.UnmarshalFormWithFile(&f, f.File, r); err != nil {
+            io.WriteString(w, err.Error())
+            return
+        }
 
-        if err := webutil.UnmarshalAndValidate(f, r); err != nil {
-            errs, ok := err.(*webutil.Errors)
+        defer f.File.Remove()
 
-            if ok {
-                webutil.FlashFormWithErrors(sess, f, errs)
-                sess.Save(r, w)
-                http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
-                return
-            }
-            panic(errs) // don't actually do this
+        v := &webutil.FileValidator{
+            File: f.File,
+            Size: 5 * (1 << 20),
+        }
+
+        if err := webutil.Validate(v); err != nil {
+            io.WriteString(w, err.Error())
+            return
         }
 
         dir, _ := os.Getwd()
-        dst, _ := ioutil.TempFile(dir, "")
+        dst, _ := os.CreateTemp(dir, "")
 
-        // Store the file on disk.
-        io.Copy(dst, f)
+        io.Copy(dst, f.File)
 
-        w.WriteHeader(http.StatusOK)
+        w.WriteHeader(http.StatusNoContent)
     }
 
-we specify that a file upload is going to take place via the `NewFile` function,
-this will return `*webutil.File` for handling the upload and validation of
-files. The `Allow` method is then called to tell it that we only want to allow
-files with the given MIME types. Finally we then pass this to
-`UnmarshalAndValidate`. This is the function that actually parses the request
-data and validates it. If any validation errors do occur, then
-`*webutil.Errors` will be returned. We then flash this information to the
-session, and redirect back.
+with the above example, we call the `webutil.UnmarshalFormWithFile` function to
+handle the unmarshalling of the file from the request. This will also handle
+requests where the file is sent as the request body itself, when this is done
+the URL query parameters are used as the typical form values. Validation of the
+file is then handled with the `webutil.FileValidator`.
 
 **Response Types**
 
@@ -114,6 +133,5 @@ provided by this package. These functions will set the appropriate
         data := map[string]string{
             "message": "JSON response",
         }
-
         webutil.JSON(w, data, http.StatusOK)
     }

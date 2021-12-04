@@ -64,7 +64,7 @@ with the above implementation we can then use `webutil.UnmarshalForm` and
     }
 
 `webutil.Validate` will always return the `webutil.ValidationErrors` error
-type. Under the hood the [gorilla/schema][3] package is used to handle the
+type. Under the hood the [gorilla/schema][1] package is used to handle the
 unmarshalling of request data into a form.
 
 **File Uploads**
@@ -135,3 +135,7 @@ provided by this package. These functions will set the appropriate
         }
         webutil.JSON(w, data, http.StatusOK)
     }
+
+[0]: https://www.gorillatoolkit.org
+[1]: https://github.com/gorilla/schema
+[2]: https://github.com/gorilla/sessions

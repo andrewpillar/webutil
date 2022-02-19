@@ -303,6 +303,7 @@ func (f *File) UnmarshalRequest(r *http.Request) error {
 			if !errors.Is(err, http.ErrMissingFile) {
 				return err
 			}
+			return nil
 		}
 
 		if err := f.unmarshalType(); err != nil {

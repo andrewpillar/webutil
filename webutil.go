@@ -425,6 +425,9 @@ func ErrFieldExists(field string) error {
 
 // Add adds the given error for the given key.
 func (e ValidationErrors) Add(key string, err error) {
+	if cerr, ok := err.(schema.ConversionError); ok {
+		err = cerr.Err
+	}
 	e[key] = append(e[key], err.Error())
 }
 

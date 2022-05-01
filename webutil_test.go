@@ -167,7 +167,7 @@ func Test_Form(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		var verrs ValidationErrors
+		verrs := make(ValidationErrors)
 
 		if err := UnmarshalForm(&test.form, test.req); err != nil {
 			if verrs0, ok := err.(ValidationErrors); ok {

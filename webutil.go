@@ -433,10 +433,6 @@ func (e ValidationErrors) Add(key string, err error) {
 
 // Merge merges the given set of errors into the current one.
 func (e ValidationErrors) Merge(verrs ValidationErrors) {
-	if e == nil {
-		e = make(ValidationErrors)
-	}
-
 	for key, errs := range verrs {
 		e[key] = append(e[key], errs...)
 	}

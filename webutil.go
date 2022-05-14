@@ -22,7 +22,7 @@ import (
 // writes the given content with the given status code to the writer. This will
 // also set the Content-Length header to the len of content.
 func HTML(w http.ResponseWriter, content string, status int) {
-	w.Header().Set("Content-Length", strconv.FormatInt(int64(len(content)), 10))
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	w.Write([]byte(content))
@@ -124,7 +124,7 @@ func JSON(w http.ResponseWriter, data interface{}, status int) {
 
 	json.NewEncoder(&buf).Encode(data)
 
-	w.Header().Set("Content-Length", strconv.FormatInt(int64(buf.Len()), 10))
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	w.Write(buf.Bytes())
@@ -134,7 +134,7 @@ func JSON(w http.ResponseWriter, data interface{}, status int) {
 // writes the given content with the given status code to the writer. This will
 // also se the Content-Length header to the len of content.
 func Text(w http.ResponseWriter, content string, status int) {
-	w.Header().Set("Content-Length", strconv.FormatInt(int64(len(content)), 10))
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)
 	w.Write([]byte(content))
@@ -235,7 +235,7 @@ type File struct {
 
 	// Field is the form field to unmarshal the file from, if the file is being
 	// uploaded as part of a "multipart/form-data" request.
-	Field  string
+	Field string
 }
 
 // UnmarshalFormWithFile will unmarshal a file from the given request, then it

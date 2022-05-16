@@ -39,7 +39,7 @@ var (
 func FormErrors(sess *sessions.Session) ValidationErrors {
 	val := sess.Flashes(errsKey)
 
-	if val == nil {
+	if len(val) == 0 {
 		return make(ValidationErrors)
 	}
 
@@ -57,7 +57,7 @@ func FormErrors(sess *sessions.Session) ValidationErrors {
 func FormFields(sess *sessions.Session) map[string]string {
 	val := sess.Flashes(formKey)
 
-	if val == nil {
+	if len(val) == 0 {
 		return map[string]string{}
 	}
 
@@ -459,9 +459,9 @@ func (e ValidationErrors) Error() string {
 
 // First returns the first error for the given key if any.
 func (e ValidationErrors) First(key string) string {
-	errs, ok := e[key]
+	errs := e[key]
 
-	if !ok {
+	if len(errs) == 0 {
 		return ""
 	}
 	return errs[0]

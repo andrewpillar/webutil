@@ -2,9 +2,9 @@ package webutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -17,64 +17,6 @@ import (
 	"github.com/gorilla/schema"
 	"github.com/gorilla/sessions"
 )
-
-// HTML sets the Content-Type of the given ResponseWriter to text/html, and
-// writes the given content with the given status code to the writer. This will
-// also set the Content-Length header to the len of content.
-func HTML(w http.ResponseWriter, content string, status int) {
-	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	w.Write([]byte(content))
-}
-
-var (
-	formKey = "form_fields"
-	errsKey = "form_errors"
-)
-
-// FormErrors returns the Errors that has been flashed to the given session
-// under the "form_errors" key. If the key does not exist, then an empty Errors
-// is returned instead.
-func FormErrors(sess *sessions.Session) ValidationErrors {
-	val := sess.Flashes(errsKey)
-
-	if val == nil {
-		return make(ValidationErrors)
-	}
-
-	err, ok := val[0].(ValidationErrors)
-
-	if !ok {
-		return make(ValidationErrors)
-	}
-	return err
-}
-
-// FormField returns the map of form fields that has been flashed to the given
-// session under the "form_fields" key. If the key does not exist, then an
-// empty map is returned instead.
-func FormFields(sess *sessions.Session) map[string]string {
-	val := sess.Flashes(formKey)
-
-	if val == nil {
-		return map[string]string{}
-	}
-
-	m, ok := val[0].(map[string]string)
-
-	if !ok {
-		return map[string]string{}
-	}
-	return m
-}
-
-// FlashFormWithErrors flashes the given Form and Errors to the given session
-// under the "form_fields" and "form_errors" keys respectively.
-func FlashFormWithErrors(sess *sessions.Session, f Form, errs ValidationErrors) {
-	sess.AddFlash(f.Fields(), formKey)
-	sess.AddFlash(errs, errsKey)
-}
 
 // BaseAddress will return the HTTP address for the given Request. This will
 // return the Scheme of the current Request (http, or https), concatenated with
@@ -115,6 +57,26 @@ func BasePath(path string) string {
 	return base
 }
 
+// Text sets the Content-Type of the given ResponseWriter to text/plain, and
+// writes the given content with the given status code to the writer. This will
+// also se the Content-Length header to the len of content.
+func Text(w http.ResponseWriter, content string, status int) {
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(status)
+	w.Write([]byte(content))
+}
+
+// HTML sets the Content-Type of the given ResponseWriter to text/html, and
+// writes the given content with the given status code to the writer. This will
+// also set the Content-Length header to the len of content.
+func HTML(w http.ResponseWriter, content string, status int) {
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	w.Write([]byte(content))
+}
+
 // JSON sets the Content-Type of the given ResponseWriter to application/json,
 // and encodes the given interface to JSON to the given writer, with the given
 // status code. This will also set the Content-Length header to the len of the
@@ -130,320 +92,88 @@ func JSON(w http.ResponseWriter, data interface{}, status int) {
 	w.Write(buf.Bytes())
 }
 
-// Text sets the Content-Type of the given ResponseWriter to text/plain, and
-// writes the given content with the given status code to the writer. This will
-// also se the Content-Length header to the len of content.
-func Text(w http.ResponseWriter, content string, status int) {
-	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(status)
-	w.Write([]byte(content))
+const (
+	formKey = "form_fields"
+	errsKey = "form_errors"
+)
+
+// FormErrors returns the Errors that has been flashed to the given session
+// under the "form_errors" key. If the key does not exist, then an empty Errors
+// is returned instead.
+func FormErrors(sess *sessions.Session) ValidationErrors {
+	val := sess.Flashes(errsKey)
+
+	if val == nil {
+		return make(ValidationErrors)
+	}
+
+	err, ok := val[0].(ValidationErrors)
+
+	if !ok {
+		return make(ValidationErrors)
+	}
+	return err
 }
 
-type Form interface {
-	// Fields returns a map of all the form's underlying values.
-	Fields() map[string]string
-}
+// FormField returns the map of form fields that has been flashed to the given
+// session under the "form_fields" key. If the key does not exist, then an
+// empty map is returned instead.
+func FormFields(sess *sessions.Session) map[string]string {
+	val := sess.Flashes(formKey)
 
-// FormUnmarshaler is used for unmarshalling forms from requests.
-type FormUnmarshaler struct {
-	Form    Form            // The Form to decode the values to, must be a pointer.
-	Decoder *schema.Decoder // The decoder to use for decoding form data.
-}
-
-// UnmarshalRequest will unmarshal the given request to the underlying form.
-// If the request has the Content-Type header set to "application/json" then
-// the request body is decoded as JSON.
-func (f FormUnmarshaler) UnmarshalRequest(r *http.Request) error {
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		if err := json.NewDecoder(r.Body).Decode(f.Form); err != nil {
-			if !errors.Is(err, io.EOF) {
-				return err
-			}
-		}
-		return nil
+	if val == nil {
+		return map[string]string{}
 	}
 
-	if r.Form == nil {
-		if err := r.ParseForm(); err != nil {
-			return err
-		}
+	m, ok := val[0].(map[string]string)
+
+	if !ok {
+		return map[string]string{}
 	}
-
-	if err := f.Decoder.Decode(f.Form, r.Form); err != nil {
-		return err
-	}
-	return nil
-}
-
-// UnmarshalForm unmarshals the given request into the given form. This will
-// return any unmarshalling errors for individual fields in a ValidationErrors
-// type.
-func UnmarshalForm(f Form, r *http.Request) error {
-	u := FormUnmarshaler{
-		Form:    f,
-		Decoder: schema.NewDecoder(),
-	}
-
-	u.Decoder.IgnoreUnknownKeys(true)
-
-	if err := u.UnmarshalRequest(r); err != nil {
-		verrs := NewValidationErrors()
-
-		switch v := err.(type) {
-		case schema.EmptyFieldError:
-			verrs.Add(v.Key, ErrFieldRequired(v.Key))
-		case schema.MultiError:
-			for field, err := range v {
-				verrs.Add(field, err)
-			}
-		case *json.UnmarshalFieldError:
-			verrs.Add(string(v.Field.Tag), err)
-		case *json.UnmarshalTypeError:
-			val := reflect.ValueOf(f)
-
-			if el := val.Elem(); el.Kind() == reflect.Struct {
-				typ := el.Type()
-
-				if field, ok := typ.FieldByName(v.Field); ok {
-					if tag, ok := field.Tag.Lookup("json"); ok {
-						v.Field = tag
-					}
-				}
-			}
-			verrs.Add(v.Field, errors.New("cannot unmarshal "+v.Value+" to "+v.Type.String()))
-		case UnmarshalError:
-			verrs.Add(v.Field, v.Err)
-		default:
-			return err
-		}
-		return verrs
-	}
-	return nil
-}
-
-// File is used for unmarshalling files from requests.
-type File struct {
-	multipart.File // The underlying file that was uploaded.
-
-	// Header is the header of the file being uploaded.
-	Header *multipart.FileHeader
-
-	// Type is the MIME type of the file, this is set during the unmarshalling
-	// of the file by sniffing the first 512 bytes of the file.
-	Type string
-
-	// Field is the form field to unmarshal the file from, if the file is being
-	// uploaded as part of a "multipart/form-data" request.
-	Field string
-}
-
-// UnmarshalFormWithFile will unmarshal a file from the given request, then it
-// it will unmarshal the rest of the request data into the given form. If the
-// file is sent as the request body itself, then the URL query parameters will
-// be used to unmarshal the rest of the form data from.
-func UnmarshalFormWithFile(f Form, file *File, r *http.Request) error {
-	if err := file.UnmarshalRequest(r); err != nil {
-		return err
-	}
-
-	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		r.Form = r.URL.Query()
-	}
-
-	if err := UnmarshalForm(f, r); err != nil {
-		return err
-	}
-	return nil
-}
-
-type sectionReadCloser struct {
-	*io.SectionReader
-}
-
-var _ multipart.File = (*sectionReadCloser)(nil)
-
-func (sectionReadCloser) Close() error { return nil }
-
-func (f *File) unmarshalType() error {
-	hdr := make([]byte, 512)
-
-	if _, err := f.Read(hdr); err != nil {
-		return err
-	}
-
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-
-	f.Type = http.DetectContentType(hdr)
-	return nil
-}
-
-// Remove will remove the underlying file if it was written to disk during the
-// upload. This will typically only be done if the file was too large to store
-// in memory.
-func (f *File) Remove() error {
-	if v, ok := f.File.(*os.File); ok {
-		return os.RemoveAll(v.Name())
-	}
-	return nil
-}
-
-// UnmarshalRequest will unmarshal a file from the given request. If the file
-// was sent as the request body, then the header of the file will only be
-// partially populated with the size of the file, and nothing else.
-func (f *File) UnmarshalRequest(r *http.Request) error {
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		var err error
-
-		f.File, f.Header, err = r.FormFile(f.Field)
-
-		if err != nil {
-			if !errors.Is(err, http.ErrMissingFile) {
-				return err
-			}
-			return nil
-		}
-
-		if err := f.unmarshalType(); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	var buf bytes.Buffer
-
-	if _, err := io.Copy(&buf, r.Body); err != nil {
-		return err
-	}
-
-	size := int64(buf.Len())
-
-	if size == 0 {
-		return nil
-	}
-
-	f.File = sectionReadCloser{
-		SectionReader: io.NewSectionReader(bytes.NewReader(buf.Bytes()), 0, size),
-	}
-	f.Header = &multipart.FileHeader{
-		Header: make(textproto.MIMEHeader),
-		Size:   size,
-	}
-
-	if err := f.unmarshalType(); err != nil {
-		if !errors.Is(err, io.EOF) {
-			return err
-		}
-	}
-	return nil
-}
-
-// FileValidator is a Validator implementation for validating file uploads.
-type FileValidator struct {
-	*File // The uploaded file.
-
-	// Size is the maximum size of a file. Set to 0 for no limit.
-	Size int64
-
-	// Mimes is a list of MIME types to allow/disallow during uploading.
-	Mimes []string
-
-	// MimesAllowed delineates whether or not the above slice of MIME types
-	// should be allowed/disallowed. Set to false to disallow, set to true to
-	// allow.
-	MimesAllowed bool
-}
-
-func humanSize(n int64) string {
-	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
-	i := 0
-
-	for ; n > 1024; i++ {
-		n /= 1024
-	}
-	return fmt.Sprintf("%d %s", n, units[i])
-}
-
-// HasFile will check to see if a file has been uploaded.
-func (v *FileValidator) HasFile() bool { return v.File.File != nil }
-
-// Validate will check if a file has been validated, along with whether or not
-// it is within the size limit, and of the allowed MIME types.
-func (v *FileValidator) Validate(errs ValidationErrors) {
-	if !v.HasFile() {
-		errs.Add(v.Field, ErrFieldRequired(v.Field))
-		return
-	}
-
-	if v.Size > 0 {
-		if v.Header.Size > v.Size {
-			errs.Add(v.Field, errors.New(v.Field+" cannot be bigger than "+humanSize(v.Size)))
-		}
-	}
-
-	mimes := strings.Join(v.Mimes, ", ")
-
-	var err error
-
-	for _, mime := range v.Mimes {
-		if (v.Type == mime) != v.MimesAllowed {
-			if v.MimesAllowed {
-				err = errors.New(v.Field + " must be one of " + mimes)
-			} else {
-				err = errors.New(v.Field + " cannot be one of " + mimes)
-			}
-			errs.Add(v.Field, err)
-		}
-	}
-}
-
-type UnmarshalError struct {
-	Field string
-	Err   error
-}
-
-func (e UnmarshalError) Error() string {
-	return "failed to unmarshal " + e.Field + ": " + e.Err.Error()
+	return m
 }
 
 // ValidationErrors records any validation errors that may have occurred. Each
 // error is kept beneath the field for which the error occurred.
 type ValidationErrors map[string][]string
 
-// NewValidationErrors returns an empty ValidationErrors.
-func NewValidationErrors() ValidationErrors { return make(ValidationErrors) }
-
-func ErrFieldRequired(field string) error {
-	return errors.New(field + " field is required")
-}
-
-func ErrFieldExists(field string) error {
-	return errors.New(field + " already exists")
-}
-
-// Add adds the given error for the given key.
-func (e ValidationErrors) Add(key string, err error) {
-	if cerr, ok := err.(schema.ConversionError); ok {
-		err = cerr.Err
+func (e ValidationErrors) Err() error {
+	if len(e) == 0 {
+		return nil
 	}
-	e[key] = append(e[key], err.Error())
+	return e
 }
 
-// Merge merges the given set of errors into the current one.
-func (e ValidationErrors) Merge(verrs ValidationErrors) {
-	for key, errs := range verrs {
-		e[key] = append(e[key], errs...)
+// Add adds the given error for the given field.
+func (e ValidationErrors) Add(field string, err error) {
+	if converr, ok := err.(schema.ConversionError); ok {
+		err = converr.Err
 	}
+	e[field] = append(e[field], err.Error())
+}
+
+func (e ValidationErrors) merge(errs ValidationErrors) {
+	for field, errs2 := range errs {
+		e[field] = append(e[field], errs2...)
+	}
+}
+
+// First returns the first error message for the given field if any.
+func (e ValidationErrors) First(field string) string {
+	errs, ok := e[field]
+
+	if !ok {
+		return ""
+	}
+	return errs[0]
 }
 
 // Error returns the string representation of the current set of errors. It will
 // be formatted like so,
 //
-//   field:
-//       err
-//       err
+//	field:
+//	    err
+//	    err
 func (e ValidationErrors) Error() string {
 	var buf strings.Builder
 
@@ -457,32 +187,334 @@ func (e ValidationErrors) Error() string {
 	return buf.String()
 }
 
-// First returns the first error for the given key if any.
-func (e ValidationErrors) First(key string) string {
-	errs, ok := e[key]
+var (
+	ErrFieldRequired = errors.New("field required")
+	ErrFieldExists   = errors.New("already exists")
+)
 
-	if !ok {
-		return ""
+// FieldError captures an error and the field name that caused it.
+type FieldError struct {
+	Name string
+	Err  error
+}
+
+func (e *FieldError) Error() string {
+	return e.Name + " " + e.Err.Error()
+}
+
+// Unwrap returns the underlying error.
+func (e *FieldError) Unwrap() error {
+	return e.Err
+}
+
+// Form is the interface used for unmarhsalling and validating form data sent
+// in an HTTP request.
+type Form interface {
+	// Fields returns a map of all the form's underlying values.
+	Fields() map[string]string
+
+	// Validate validates the form. This should return an error type of
+	// ValidationErrors should validation fail.
+	Validate(ctx context.Context) error
+}
+
+func unmarshalRequest(f Form, r *http.Request) error {
+	typ := r.Header.Get("Content-Type")
+
+	if strings.HasPrefix(typ, "application/json") {
+		if err := json.NewDecoder(r.Body).Decode(f); err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+		}
+		return nil
 	}
-	return errs[0]
-}
 
-type Validator interface {
-	// Validate performs validation on a set of data. Each error that occurs
-	// should be added to the given set of errors.
-	Validate(errs ValidationErrors)
-}
+	if r.Form == nil {
+		if err := r.ParseForm(); err != nil {
+			return err
+		}
+	}
 
-// Validate will call Validate on the given Validator. If the given Validator
-// fails, then the returned error will be of type ValidationErrors, otherwise
-// it will be nil.
-func Validate(v Validator) error {
-	errs := NewValidationErrors()
+	dec := schema.NewDecoder()
+	dec.IgnoreUnknownKeys(true)
 
-	v.Validate(errs)
-
-	if len(errs) > 0 {
-		return errs
+	if err := dec.Decode(f, r.Form); err != nil {
+		return err
 	}
 	return nil
+}
+
+// UnmarshalForm parses the request into the given Form. If any errors occur
+// during unmarshalling, then these will be returned via the ValidationErrors
+// type.
+func UnmarshalForm(f Form, r *http.Request) error {
+	if err := unmarshalRequest(f, r); err != nil {
+		errs := make(ValidationErrors)
+
+		switch v := err.(type) {
+		case schema.EmptyFieldError:
+			errs.Add(v.Key, ErrFieldRequired)
+		case schema.MultiError:
+			for field, err := range v {
+				errs.Add(field, err)
+			}
+		case *json.UnmarshalFieldError:
+			errs.Add(string(v.Field.Tag), err)
+		case *json.UnmarshalTypeError:
+			val := reflect.ValueOf(f)
+
+			if el := val.Elem(); el.Kind() == reflect.Struct {
+				typ := el.Type()
+
+				if field, ok := typ.FieldByName(v.Field); ok {
+					if tag, ok := field.Tag.Lookup("json"); ok {
+						v.Field = tag
+					}
+				}
+			}
+			errs.Add(v.Field, errors.New("cannot unmarshal "+v.Value+" to "+v.Type.String()))
+		case *FieldError:
+			errs.Add(v.Name, v.Err)
+		default:
+			return err
+		}
+		return errs.Err()
+	}
+	return nil
+}
+
+// UnmarshalFormAndValidate parses the request into the given Form. If
+// unmmarshalling succeeds, then the Form is validated via the Validate method.
+func UnmarshalFormAndValidate(f Form, r *http.Request) error {
+	var errs ValidationErrors
+
+	if err := UnmarshalForm(f, r); err != nil {
+		if v, ok := err.(ValidationErrors); ok {
+			errs = v
+			goto validate
+		}
+		return err
+	}
+
+validate:
+	if err := f.Validate(r.Context()); err != nil {
+		if v, ok := err.(ValidationErrors); ok && errs != nil {
+			errs.merge(v)
+		}
+		return err
+	}
+	return nil
+}
+
+// File is used for unmarshalling files from requests.
+type File struct {
+	// The underlying file that was uploaded.
+	multipart.File
+
+	// Header is the header of the file being uploaded.
+	Header *multipart.FileHeader
+
+	// Type is the MIME type of the file, this is set during the unmarshalling
+	// of the file by sniffing the first 512 bytes of the file.
+	Type string
+}
+
+// Remove will remove the underlying file if it was written to disk during the
+// upload. This will typically only be done if the file was too large to store
+// in memory.
+func (f *File) Remove() error {
+	if v, ok := f.File.(*os.File); ok {
+		return os.RemoveAll(v.Name())
+	}
+	return nil
+}
+
+func (f *File) HasFile() bool { return f.File != nil }
+
+func unmarshalMimeType(rs io.ReadSeeker) (string, error) {
+	hdr := make([]byte, 512)
+
+	if _, err := rs.Read(hdr); err != nil {
+		return "", err
+	}
+
+	if _, err := rs.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	return http.DetectContentType(hdr), nil
+}
+
+// defaultMaxMemory is the maximum amount of memory to use when uploading a
+// file. If this is exceeded, then the file is written to a temporary file on
+// disk.
+var defaultMaxMemory int64 = 32 << 20
+
+// UnmarshalFiles parses the request for every file sent with it. The request
+// must have the Content-Type of multipart/form-data, otherwise an error is
+// returned. A boolean is returned for whether or not any files were sent in the
+// request.
+func UnmarshalFiles(field string, r *http.Request) ([]*File, bool, error) {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		return nil, false, errors.New("invalid request type")
+	}
+
+	if err := r.ParseMultipartForm(defaultMaxMemory); err != nil {
+		return nil, false, err
+	}
+
+	hdrs, ok := r.MultipartForm.File[field]
+
+	if !ok {
+		return nil, false, nil
+	}
+
+	files := make([]*File, 0, len(hdrs))
+
+	for _, hdr := range hdrs {
+		f, err := hdr.Open()
+
+		if err != nil {
+			return nil, false, err
+		}
+
+		typ, err := unmarshalMimeType(f)
+
+		if err != nil {
+			return nil, false, err
+		}
+
+		files = append(files, &File{
+			File:   f,
+			Header: hdr,
+			Type:   typ,
+		})
+	}
+	return files, true, nil
+}
+
+type sectionReadCloser struct {
+	*io.SectionReader
+}
+
+var _ multipart.File = (*sectionReadCloser)(nil)
+
+func (sectionReadCloser) Close() error { return nil }
+
+// UnmarshalFile parses the request for a file sent with it. If the request has
+// the Content-Type of multipart/form-data, then the file will be taken from
+// the multipart form via the given field, otherwise it will be taken from the
+// request body. A boolean is returned for whether or not a file was sent in
+// the request.
+func UnmarshalFile(field string, r *http.Request) (*File, bool, error) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		files, ok, err := UnmarshalFiles(field, r)
+
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			return nil, false, nil
+		}
+		return files[0], true, nil
+	}
+
+	var (
+		buf bytes.Buffer
+		f   multipart.File
+	)
+
+	n, err := io.CopyN(&buf, r.Body, defaultMaxMemory+1)
+
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			return nil, false, err
+		}
+	}
+
+	if n == 0 {
+		return nil, true, nil
+	}
+
+	f = sectionReadCloser{
+		SectionReader: io.NewSectionReader(bytes.NewReader(buf.Bytes()), 0, n),
+	}
+
+	if n > defaultMaxMemory {
+		tmp, err := os.CreateTemp("", "webutil-file-")
+
+		if err != nil {
+			return nil, false, err
+		}
+
+		n, err = io.Copy(tmp, io.MultiReader(&buf, r.Body))
+
+		if err != nil {
+			os.Remove(tmp.Name())
+			return nil, false, err
+		}
+
+		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+			os.Remove(tmp.Name())
+			return nil, false, err
+		}
+		f = tmp
+	}
+
+	typ, err := unmarshalMimeType(f)
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	return &File{
+		File: f,
+		Header: &multipart.FileHeader{
+			Header: make(textproto.MIMEHeader),
+			Size:   n,
+		},
+		Type: typ,
+	}, true, nil
+}
+
+// UnmarshalFormWithFile parses the request for a file sent with it. If the
+// request has the Content-Type of multipart/form-data, then the file will be
+// taken from the multipart form via the given field. This will then unmarshal
+// the rest of the request data into the given Form. If file in the request was
+// sent in the request body, then the URL query parameters are unmarshalled
+// into the given Form. A boolean is returned for whether or not a file was a
+// file in the request.
+func UnmarshalFormWithFile(f Form, field string, r *http.Request) (*File, bool, error) {
+	file, ok, err := UnmarshalFile(field, r)
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		r.Form = r.URL.Query()
+	}
+
+	if err := UnmarshalForm(f, r); err != nil {
+		return nil, false, err
+	}
+	return file, ok, nil
+}
+
+// UnmarshalFormWithFiles parses the request for every file sent with it. The
+// request must have the Content-Type of multipart/form-data, otherwise an
+// error is returned. This will then unmarshal the rest of the request data into
+// the given Form. A boolean is returned for whether or not any files were sent
+// in the request.
+func UnmarshalFormWithFiles(f Form, field string, r *http.Request) ([]*File, bool, error) {
+	files, ok, err := UnmarshalFiles(field, r)
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	if err := UnmarshalForm(f, r); err != nil {
+		return nil, false, err
+	}
+	return files, ok, nil
 }

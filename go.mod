@@ -1,4 +1,4 @@
-module github.com/andrewpillar/webutil
+module github.com/andrewpillar/webutil/v2
 
 go 1.15
 

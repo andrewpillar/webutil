@@ -133,6 +133,13 @@ func FormFields(sess *sessions.Session) map[string]string {
 	return m
 }
 
+// FlashFormWithErrors flashes the given Form and Errors to the given session
+// under the "form_fields" and "form_errors" keys respectively.
+func FlashFormWithErrors(sess *sessions.Session, f Form, errs ValidationErrors) {
+	sess.AddFlash(f.Fields(), formKey)
+	sess.AddFlash(errs, errsKey)
+}
+
 // ValidationErrors records any validation errors that may have occurred. Each
 // error is kept beneath the field for which the error occurred.
 type ValidationErrors map[string][]string

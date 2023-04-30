@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -108,21 +109,12 @@ func (p Post) Fields() map[string]string {
 }
 
 func (p Post) Validate(ctx context.Context) error {
-	errs := make(ValidationErrors)
+	var v Validator
 
-	if p.Title == "" {
-		errs.Add("title", &FieldError{
-			Name: "Title",
-			Err:  ErrFieldRequired,
-		})
-	}
-	if p.Body == "" {
-		errs.Add("body", &FieldError{
-			Name: "Post",
-			Err:  ErrFieldRequired,
-		})
-	}
-	return errs.Err()
+	v.Add("title", p.Title, FieldRequired)
+	v.Add("body", p.Body, FieldRequired)
+
+	return v.Validate(ctx).Err()
 }
 
 func Test_Form(t *testing.T) {
@@ -391,6 +383,101 @@ func Test_UnmarshalFormWithFiles(t *testing.T) {
 	for i, f := range files {
 		if f.Type != "image/jpeg" {
 			t.Fatalf("files[%d] - unexpected file.Type, expected=%q, got=%q\n", i, "image/jpeg", f.Type)
+		}
+	}
+}
+
+type F struct {
+	S string
+}
+
+func (f F) Fields() map[string]string {
+	return map[string]string{"S": f.S}
+}
+
+func (f F) Validate(ctx context.Context) error {
+	var v Validator
+
+	re := regexp.MustCompile("^[a-zA-Z]+$")
+
+	v.Add("S", f.S, FieldRequired)
+	v.Add("S", f.S, FieldMatches(re))
+	v.Add("S", f.S, FieldLen(6, 32))
+	v.Add("S", f.S, FieldMinLen(6))
+	v.Add("S", f.S, FieldMaxLen(32))
+	v.Add("S", f.S, FieldEquals("secret"))
+
+	return v.Validate(ctx).Err()
+}
+
+func Test_Validator(t *testing.T) {
+	tests := []struct {
+		form      F
+		req       *http.Request
+		shoulderr bool
+		errs      []string
+		errCount  int
+	}{
+		{
+			F{},
+			&http.Request{
+				Form: url.Values{
+					"S": nil,
+				},
+			},
+			true,
+			[]string{"S"},
+			5,
+		},
+		{
+			F{},
+			&http.Request{
+				Form: url.Values{
+					"S": {"secret"},
+				},
+			},
+			false,
+			[]string{"S"},
+			0,
+		},
+		{
+			F{},
+			&http.Request{
+				Form: url.Values{
+					"S": {"secretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecret"},
+				},
+			},
+			true,
+			[]string{"S"},
+			3,
+		},
+	}
+
+	for i, test := range tests {
+		if err := UnmarshalFormAndValidate(&test.form, test.req); err != nil {
+			if test.shoulderr {
+				errs, ok := err.(ValidationErrors)
+
+				if !ok {
+					t.Errorf("tests[%d] - unexpected error, expected=%T, got=%T(%s)\n", i, ValidationErrors{}, err, err)
+				}
+
+				count := 0
+
+				for _, field := range test.errs {
+					count += len(errs[field])
+
+					if _, ok := errs[field]; !ok {
+						t.Errorf("tests[%d] - expected field %q in errors\n", i, field)
+					}
+				}
+
+				if count != test.errCount {
+					t.Errorf("tests[%d] - unexpected error count, expected=%d, got=%d\n", i, test.errCount, count)
+				}
+				continue
+			}
+			t.Errorf("tests[%d] - should not error, it did %q\n", i, err)
 		}
 	}
 }

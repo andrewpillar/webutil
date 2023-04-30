@@ -105,7 +105,10 @@ func (v *Validator) Validate(ctx context.Context) ValidationErrors {
 					break
 				}
 			}
-			errs.Add(fld.name, err)
+
+			if err != nil {
+				errs.Add(fld.name, err)
+			}
 		}
 	}
 	return errs

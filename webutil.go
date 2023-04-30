@@ -308,6 +308,7 @@ validate:
 	if err := f.Validate(r.Context()); err != nil {
 		if v, ok := err.(ValidationErrors); ok && errs != nil {
 			errs.merge(v)
+			err = errs
 		}
 		return err
 	}
